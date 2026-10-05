@@ -4,6 +4,10 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  
 
 from .ontology import PLOVER_ONTOLOGY
 
@@ -94,12 +98,12 @@ def load_config(path: str | Path) -> PipelineConfig:
         item = config.ontology[category]
         if not isinstance(item, dict) or not str(item.get("description", "")).strip():
             raise ValueError(f"Missing description for category {category}")
-        event_types = item.get("event_types")
+        modes = item.get("modes")
         expected = {value for value in canonical_types if value is not None}
-        if not isinstance(event_types, dict) or set(event_types) != expected:
-            raise ValueError(f"event_types for {category} do not match canonical ontology")
-        if not all(isinstance(value, str) and value.strip() for value in event_types.values()):
-            raise ValueError(f"Every event_type in {category} must have a description")
+        if not isinstance(modes, dict) or set(modes) != expected:
+            raise ValueError(f"modes for {category} do not match canonical ontology")
+        if not all(isinstance(value, str) and value.strip() for value in modes.values()):
+            raise ValueError(f"Every mode in {category} must have a description")
         if item.get("allow_category_only") is not (None in canonical_types):
             raise ValueError(f"Invalid allow_category_only for {category}")
     for name in ("model", "system_prompt", "user_prompt_template"):

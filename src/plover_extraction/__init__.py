@@ -4,7 +4,7 @@ from .models import EventMention, ExtractionRequest, ExtractionResult
 from .ontology import (
     PLOVER_ONTOLOGY,
     PloverCategory,
-    validate_event_type,
+    validate_mode,
 )
 
 __all__ = [

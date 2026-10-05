@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from .ontology import PloverCategory, validate_event_type
+from .ontology import PloverCategory, validate_mode
 
 
 def _required(value: str, field: str) -> str:
@@ -40,14 +40,14 @@ class EventMention:
     actor_text: str
     recipient_text: str
     category: PloverCategory
-    event_type: str | None
+    mode: list | None
     evidence_sentence_ids: tuple[str, ...]
     evidence: dict[str, str]
 
     def __post_init__(self) -> None:
         for field in ("doc_id", "actor_text", "recipient_text"):
             object.__setattr__(self, field, _required(getattr(self, field), field))
-        validate_event_type(self.category, self.event_type)
+        validate_mode(self.category, self.mode)
         if not self.evidence_sentence_ids:
             raise ValueError("evidence_sentence_ids must not be empty")
         ids = tuple(_required(value, "evidence_sentence_ids item") for value in self.evidence_sentence_ids)
@@ -68,7 +68,7 @@ class EventMention:
             "actor_text": self.actor_text,
             "recipient_text": self.recipient_text,
             "category": self.category,
-            "event_type": self.event_type,
+            "mode": self.mode,
             "evidence_sentence_ids": list(self.evidence_sentence_ids),
             "evidence": self.evidence,
         }

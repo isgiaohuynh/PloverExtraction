@@ -1,8 +1,9 @@
 # Runtime and complete Plover ontology configuration.
-model: gpt-4.1-mini
-api_base: https://api.openai.com/v1
-api_key_env: OPENAI_API_KEY
-temperature: 0.0
+model: Qwen3.8-27B-UD-Q4_K_M.gguf
+api_base: https://nosi-c4i.com.vn/chdk/mid/llm/v1
+api_key_env: mid-vdt-2026
+
+temperature: 0.01
 timeout_seconds: 60
 max_retries: 2
 
@@ -11,7 +12,7 @@ ontology_json: |
     "THREATEN": {
       "description": "Communicate an adverse consequence directed at a target, conditionally or unconditionally, to intimidate or compel. The communication has occurred; the threatened action need not occur. A demand without an adverse consequence, hostile commentary, risk forecast, or announcement of military plans alone is insufficient.",
       "allow_category_only": true,
-      "event_types": {
+      "modes": {
         "Territory": "Threaten occupation or seizure of control over all or part of a territory.",
         "Arrest": "Threaten arrest, detention, or imprisonment; includes an in-absentia arrest not physically enforced.",
         "Relations": "Threaten to suspend relations or ongoing talks, meetings, or negotiations.",
@@ -23,7 +24,7 @@ ontology_json: |
     "PROTEST": {
       "description": "Carry out public or collective dissent through demonstrations, strikes, hunger strikes, boycotts, obstruction, or riots. A hunger strike may involve one person. Violence integral to a riot remains PROTEST; do not duplicate that same act as ASSAULT. Separately evaluate police violence or arrests. Hunger caused by food deprivation is not a hunger strike.",
       "allow_category_only": true,
-      "event_types": {
+      "modes": {
         "Riot": "Violent collective protest whose participants intend physical injury or property damage.",
         "Demo": "An organized, continuous, largely peaceful public demonstration or rally against an actor or policy.",
         "Strike": "Collective withdrawal of labor or abandonment of workplaces as protest.",
@@ -35,7 +36,7 @@ ontology_json: |
     "MOBILIZE": {
       "description": "Actually deploy, reinforce, mobilize, or increase readiness of military, police, armed groups, or military hardware, including exercises already underway. Training fire or simulated attacks are not ASSAULT. A planned exercise, equipment inventory, or existing deployment alone does not establish a new mobilization; actual attacks on real opponents belong to ASSAULT.",
       "allow_category_only": true,
-      "event_types": {
+      "modes": {
         "Troops": "Mobilize armed personnel or military units without actual combat; distinguish police and non-state militias.",
         "Weapons": "Mobilize or increase readiness of weapon systems, military ships, aircraft, or vehicles.",
         "Militia": "Mobilize or increase readiness of a non-state entity with significant military capability.",
@@ -45,7 +46,7 @@ ontology_json: |
     "COERCE": {
       "description": "Implement coercive control through arrest, detention, seizure, deportation, restrictions, censorship, cyber intrusion, or withholding essentials, below substantial physical violence. An expressly imposed emergency or effective curfew qualifies. An arrest warrant or order alone does not establish an arrest. Beating, torture, kidnapping, hostage-taking, and combat capture belong to ASSAULT.",
       "allow_category_only": true,
-      "event_types": {
+      "modes": {
         "Martial-law": "Impose a state-of-emergency or martial-law regime.",
         "Seize": "Execute a search or raid, or confiscate property.",
         "Restrict": "Impose restrictions on political freedoms or movement.",
@@ -61,7 +62,7 @@ ontology_json: |
     "ASSAULT": {
       "description": "Carry out or physically attempt deliberate violence against people or property: shooting, bombing, shelling, beating, torture, sexual violence, abduction, hostage-taking, or combat capture. Police perpetrators do not make violence COERCE. Distinguish custodial arrest, training simulations, and violence integral to a PROTEST riot. Existing territorial control alone does not establish a new attack.",
       "allow_category_only": true,
-      "event_types": {
+      "modes": {
         "Unconventional": "Use chemical, biological, radiological, or nuclear weapons.",
         "Targeted": "Attempt or carry out assassination, execution, or deliberate mass killing of defenseless people.",
         "Suicide-attack": "An individual or vehicle attack explicitly involving the attacker's suicide.",
@@ -82,7 +83,7 @@ ontology_json: |
     "APOLITICAL": {
       "description": "A non-political event caused by a natural hazard or the spread of disease. Do not use this category for political responses to, exploitation of, or disputes about the event.",
       "allow_category_only": false,
-      "event_types": {
+      "modes": {
         "natural_disaster": "A naturally caused hazardous event, such as an earthquake, flood, storm, wildfire, landslide, drought, volcanic eruption, or tsunami, that harms or threatens people, property, or the environment.",
         "epidemic": "An outbreak or unusually widespread occurrence of an infectious disease affecting a community, region, or population."
       }
@@ -95,28 +96,34 @@ system_prompt: |
   and return valid JSON.
 user_prompt_template: |
   TASK
-  Find every distinct Plover event in SENTENCES. Classify each event using
-  ONTOLOGY and its definitions, not keyword matching alone.
+  Extract every distinct supported event described in the document. Sentence IDs identify evidence; they do not define event boundaries. One event may be described across several sentences. One sentence may describe several distinct events.
 
   EXTRACTION RULES
-  1. actor_text is the exact text span for the entity performing or communicating
-  the event. recipient_text is the exact text span for its target.
-  2. Copy actor_text and recipient_text verbatim from SENTENCES; never infer an
-  unstated entity. If either role is not explicit, do not emit that event.
-  3. evidence_sentence_ids contains every and only sentence needed to establish
-  the actor, recipient, and event. Use only IDs present in SENTENCES.
-  4. Emit separate array items for distinct event mentions. Do not duplicate one
-  event merely because it has multiple evidence sentences.
-  5. category must be an ONTOLOGY category. event_type must belong to that
-  category, or be null when only the category can be determined. Return an empty
-  events array when no supported event is explicit.
-  6. Copy DOCUMENT_ID exactly into doc_id for every event. Do not return evidence
-  text; the pipeline resolves evidence_sentence_ids to source text after the LLM
-  response to minimize output tokens.
+  1. Apply the ONTOLOGY definition before emitting an event. If the action does not satisfy any category definition, omit it. Do not force warnings, requests, diplomatic complaints, or other unsupported actions into the available categories.
+  2. actor_text is the entity performing the action. recipient_text is the entity targeted by that action. In passive voice, the grammatical subject may be the recipient: "X was attacked by Y" means actor=Y and recipient=X. "X was arrested" identifies X as the recipient, not the actor.
+  3. Copy actor_text and recipient_text verbatim from SENTENCES when their roles are explicitly supported. Unnamed explicit entities such as "four people" are valid. If a role is unstated or cannot be reliably identified, set that field to "unknown"; do not infer an entity, swap roles, or copy the known entity into the missing role. actor_text and recipient_text may have the same value only when the text explicitly establishes that the entity acts on itself. Missing roles do not disqualify an otherwise supported event.
+  4. Emit one item per distinct event, not per sentence or mention. Merge repeated descriptions of the same action when the text links them to the same incident. Repeated reporting, additional details, consequences, and paraphrases do not create new events. Do not merge separate incidents merely because their actors or categories are similar.
+  5. Split events when the text establishes separate actions or incidents, for example an assault followed by an arrest, or attacks occurring at different locations or times. Each resulting event must independently satisfy all rules.
+  6. evidence_sentence_ids must include all sentences that directly describe the same event or provide details needed to establish its action, actor, recipient, or links between mentions. Do not select only the sentence containing the action if the actor or recipient is established in another sentence. Every non-"unknown" actor_text and recipient_text must appear verbatim in at least one cited sentence, and the cited evidence must support that entity's role in this specific event. Include sentences needed to resolve pronouns or references, but exclude sentences about unrelated events or general background. Use only IDs present in SENTENCES.
+  7. THREATEN requires a communicated adverse consequence directed at a target to intimidate or compel. A safety warning about danger from others is not THREATEN. A request to protect citizens, arrest a suspect, or punish a perpetrator is not THREATEN unless an adverse consequence is explicitly communicated.
+  8. category must be an ONTOLOGY category. mode must be a supported type within that category. If multiple types explicitly describe the same event, join them with "||". Never use "||" to express uncertainty. Use null only when the category is established and the ontology permits category-only classification.
+  9. Before returning, check every item: the action satisfies the category definition; actor and recipient are assigned in the correct direction; every non-"unknown" role value appears verbatim in the cited evidence and is supported for this event; all sentences directly describing the same event are included; the item represents a distinct event rather than another mention. If a supported role's sentence was omitted, add its sentence ID. If the role cannot be established from the text, set it to "unknown". Remove unsupported events.
+  10. Return {"events": []} when no event satisfies all rules.
+
 
   OUTPUT CONTRACT
   Return JSON only, with exactly this shape (no markdown or extra keys):
-  {"events":[{"doc_id":"document id","actor_text":"exact source span","recipient_text":"exact source span","category":"ASSAULT","event_type":"Drone","evidence_sentence_ids":["s1"]}]}
+  {
+    "events": [
+      {
+        "actor_text":"exact source span",
+        "recipient_text":"exact source span",
+        "category":"ASSAULT",
+        "mode":"Drone||Aerial",
+        "evidence_sentence_ids":["s1", "s2"]
+      }
+    ]
+  }
 
   DOCUMENT_ID: $doc_id
   ONTOLOGY: $ontology

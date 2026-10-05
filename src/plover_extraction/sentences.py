@@ -13,5 +13,13 @@ def split_sentences(raw_text: str, pattern: str) -> list[Sentence]:
         parts = re.split(pattern, raw_text.strip())
     except re.error as error:
         raise ValueError(f"Invalid sentence_split_pattern: {error}") from error
-    cleaned = [part.strip() for part in parts if part.strip()]
-    return [Sentence(f"s{index}", text) for index, text in enumerate(cleaned, 1)]
+    cleaned = [part.strip() for part in parts if part and len(part.strip().split()) > 3]
+    indexed_sentences = []
+    for index, text in enumerate(cleaned, 1):
+        punctuation = text[-1] if text[-1] in ".!?" else "."
+        content = text[:-1].rstrip() if text[-1] in ".!?" else text
+
+        indexed_sentences.append(
+            f"{content} [s{index}]{punctuation}"
+        )
+    return [Sentence(f"s{index}", text) for index, text in enumerate(cleaned, 1)], " ".join(indexed_sentences)

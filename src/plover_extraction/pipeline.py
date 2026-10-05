@@ -13,7 +13,10 @@ def build_user_prompt(
     request: ExtractionRequest, config: PipelineConfig, sentences: list[Sentence]
 ) -> str:
     """Render the externally configured extraction prompt."""
-    sentence_data = [{"id": item.sentence_id, "text": item.text} for item in sentences]
+    sentence_data = [
+        {"id": sentence.sentence_id, "text": sentence.text}
+        for sentence in sentences
+    ]
     try:
         return Template(config.user_prompt_template).substitute(
             doc_id=json.dumps(request.doc_id, ensure_ascii=False),
@@ -24,14 +27,17 @@ def build_user_prompt(
         raise ValueError(f"Invalid user_prompt_template placeholder: {error}") from error
 
 
-def extract_document(
+async def extract_document(
     request: ExtractionRequest, config: PipelineConfig, client: LLMClient
 ) -> ExtractionResult:
     """Split raw text, query the LLM, and validate its output against the request."""
-    sentences = split_sentences(request.raw_text, config.sentence_split_pattern)
-    result = client.generate_json(
+    sentences, _ = split_sentences(
+        request.raw_text, config.sentence_split_pattern
+    )
+    result = await client.generate_json(
         config.system_prompt, build_user_prompt(request, config, sentences)
     )
+    print("\n\nGenerated JSON:", json.dumps(result, indent=2, ensure_ascii=False), flush=True)
     if not isinstance(result, dict) or not isinstance(result.get("events"), list):
         raise ValueError("LLM output must be an object containing an events array")
     known_ids = {sentence.sentence_id for sentence in sentences}
@@ -39,8 +45,9 @@ def extract_document(
     for raw in result["events"]:
         if not isinstance(raw, dict):
             raise ValueError("Each LLM event must be an object")
+        raw["doc_id"] = request.doc_id  
         allowed = {
-            "doc_id", "actor_text", "recipient_text", "category", "event_type",
+            "doc_id", "actor_text", "recipient_text", "category", "mode",
             "evidence_sentence_ids",
         }
         if set(raw) != allowed:
@@ -61,7 +68,7 @@ def extract_document(
             actor_text=raw["actor_text"],
             recipient_text=raw["recipient_text"],
             category=raw["category"],
-            event_type=raw["event_type"],
+            mode=raw["mode"].split("||") if raw["mode"] is not None else None,
             evidence_sentence_ids=evidence,
             evidence={
                 sentence.sentence_id: sentence.text

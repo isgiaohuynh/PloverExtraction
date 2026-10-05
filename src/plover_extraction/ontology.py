@@ -22,13 +22,17 @@ PLOVER_ONTOLOGY: Final[dict[PloverCategory, tuple[str | None, ...]]] = {
     "APOLITICAL": ("natural_disaster", "epidemic"),
 }
 
-def validate_event_type(category: str, event_type: str | None) -> None:
-    """Raise ``ValueError`` unless category and event type form a valid pair."""
+def validate_mode(category: str, modes: list | None) -> None:
+    """Raise ``ValueError`` unless category and mode form a valid pair."""
     if category not in PLOVER_ONTOLOGY:
         allowed = ", ".join(PLOVER_ONTOLOGY)
         raise ValueError(f"Unknown category {category!r}; expected one of: {allowed}")
-    if event_type not in PLOVER_ONTOLOGY[category]:
-        allowed = ", ".join(value or "null" for value in PLOVER_ONTOLOGY[category])
-        raise ValueError(
-            f"Invalid event_type {event_type!r} for {category}; expected one of: {allowed}"
-        )
+    if modes:
+        for mode in modes:
+            if mode not in PLOVER_ONTOLOGY[category]:
+                allowed = ", ".join(value or "null" for value in PLOVER_ONTOLOGY[category])
+                raise ValueError(
+                    f"Invalid mode {mode!r} for {category}; expected one of: {allowed}"
+                )
+    elif category == "APOLITICAL":
+        raise ValueError(f"Mode is compulsory for APOLITICAL events!")

@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -14,9 +15,13 @@ class FakeClient:
         self.response = response
         self.user_prompt = ""
 
-    def generate_json(self, system_prompt, user_prompt):
+    async def generate_json(self, system_prompt, user_prompt):
         self.user_prompt = user_prompt
         return self.response
+
+
+def run_extract(*args):
+    return asyncio.run(extract_document(*args))
 
 
 def config():
@@ -33,7 +38,7 @@ def test_raw_text_is_split_and_llm_output_is_normalized():
         "evidence_sentence_ids": ["s1", "s2"],
     }]})
     request = ExtractionRequest("doc-1", "A đe dọa B. B đã phản đối.")
-    result = extract_document(request, config(), client)
+    result = run_extract(request, config(), client)
     assert result.events[0].evidence_sentence_ids == ("s1", "s2")
     assert result.events[0].evidence == {
         "s1": "A đe dọa B.", "s2": "B đã phản đối."
@@ -46,7 +51,7 @@ def test_raw_text_is_split_and_llm_output_is_normalized():
 
 
 def test_empty_event_list_is_supported():
-    assert extract_document(
+    assert run_extract(
         ExtractionRequest("d", "Không có sự kiện."),
         config(), FakeClient({"events": []}),
     ).events == ()
@@ -58,7 +63,7 @@ def test_unknown_evidence_id_is_rejected():
         "event_type": "Violence", "evidence_sentence_ids": ["s9"]
     }]}
     with pytest.raises(ValueError, match="unknown sentence IDs"):
-        extract_document(
+        run_extract(
             ExtractionRequest("d", "A đe dọa B."),
             config(), FakeClient(response),
         )
@@ -70,7 +75,7 @@ def test_llm_cannot_add_unexpected_fields():
         "category": "THREATEN", "event_type": "Violence", "extra": True,
     }]}
     with pytest.raises(ValueError, match="fields must be exactly"):
-        extract_document(
+        run_extract(
             ExtractionRequest("d", "A đe dọa B."),
             config(), FakeClient(response),
         )
@@ -83,7 +88,7 @@ def test_llm_doc_id_must_match_request():
         "evidence_sentence_ids": ["s1"],
     }]}
     with pytest.raises(ValueError, match="doc_id must match"):
-        extract_document(
+        run_extract(
             ExtractionRequest("d", "A đe dọa B."), config(), FakeClient(response),
         )
 
@@ -114,7 +119,7 @@ def test_sentence_split_pattern_is_configurable():
 
 def test_prompt_contains_schema_and_extraction_rules():
     client = FakeClient({"events": []})
-    extract_document(ExtractionRequest("doc-1", "A đe dọa B."), config(), client)
+    run_extract(ExtractionRequest("doc-1", "A đe dọa B."), config(), client)
     assert "EXTRACTION RULES" in client.user_prompt
     assert "actor_text" in client.user_prompt
     assert "doc_id" in client.user_prompt
@@ -132,7 +137,7 @@ def test_pipeline_rejects_mismatched_category_and_event_type():
         "event_type": "Arrest", "evidence_sentence_ids": ["s1"],
     }]}
     with pytest.raises(ValueError, match="Invalid event_type"):
-        extract_document(ExtractionRequest("d", "A arrested B."), config(), FakeClient(response))
+        run_extract(ExtractionRequest("d", "A arrested B."), config(), FakeClient(response))
 
 
 def test_example_config_describes_every_category_and_event_type():
